@@ -144,7 +144,7 @@ class FloatingWindow(QWidget):
         # 顶栏：标题 + 刷新按钮 + 关闭按钮
         header = QHBoxLayout()
         header.setSpacing(4)
-        title = QLabel("CS2 行情")
+        title = QLabel("dust2.cc")
         title.setObjectName("Title")
         header.addWidget(title)
         self.last_refresh_label = QLabel("")
