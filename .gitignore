@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+
+# venv
+.venv/
+venv/
+env/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 用户运行时数据（不应该出现在项目目录，但保险起见）
+.steamdt/
+config.local.json
+
+# Claude Code 本地设置（个人偏好，不入库）
+.claude/settings.local.json
