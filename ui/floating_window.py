@@ -1,11 +1,17 @@
-"""桌面常驻悬浮主窗口。"""
+"""桌面常驻悬浮主窗口。
+
+- 紧凑模式：默认更小的字号 / 行距
+- 缩放：右键菜单 + Ctrl/Cmd ± / 0 快捷键，缩放 0.8x~1.5x，写入 config
+- 持仓总价显示在大盘指数右侧
+- 求购列可一键隐藏
+"""
 
 from __future__ import annotations
 
 from datetime import datetime
 
 from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QCursor, QGuiApplication
+from PyQt6.QtGui import QAction, QCursor, QGuiApplication, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -22,110 +28,130 @@ from ui.price_row import PriceRow
 from watchlist import WatchItem
 
 
-STYLE = """
-QWidget#Root {
+# 缩放范围
+SCALE_MIN = 0.8
+SCALE_MAX = 1.6
+SCALE_STEP = 0.1
+
+
+def _build_style(s: float) -> str:
+    """根据 scale 生成 QSS。s=1.0 是紧凑默认尺寸；放大缩小线性插值。"""
+    f_base = int(12 * s)
+    f_small = int(10 * s)
+    f_title = int(11 * s)
+    f_idx = int(20 * s)
+    f_idx_diff = int(12 * s)
+    f_btn = int(13 * s)
+    radius = max(6, int(10 * s))
+    return f"""
+QWidget#Root {{
     background-color: rgba(20, 22, 28, 220);
-    border-radius: 12px;
-}
-QLabel {
+    border-radius: {radius}px;
+}}
+QLabel {{
     color: #e6e6e6;
-    font-size: 13px;
-}
-QLabel#Title {
-    font-size: 12px;
+    font-size: {f_base}px;
+}}
+QLabel#Title {{
+    font-size: {f_title}px;
     color: #9aa0a6;
     letter-spacing: 1px;
-}
-QLabel#IndexValue {
-    font-size: 22px;
+}}
+QLabel#RefreshClock {{
+    font-size: {f_small}px;
+    color: #6b7280;
+}}
+QLabel#IndexValue {{
+    font-size: {f_idx}px;
     font-weight: 600;
     color: #e6e6e6;
-}
+}}
+QLabel#PortfolioValue {{
+    font-size: {f_idx_diff}px;
+    color: #d4af37;
+    padding: 1px 6px;
+    background: rgba(212, 175, 55, 25);
+    border-radius: 4px;
+}}
 /* 国内习惯：红涨 / 绿跌 */
-QLabel#IndexDiffUp {
-    font-size: 13px;
+QLabel#IndexDiffUp {{
+    font-size: {f_idx_diff}px;
     color: #ff5a5f;
-}
-QLabel#IndexDiffDown {
-    font-size: 13px;
+}}
+QLabel#IndexDiffDown {{
+    font-size: {f_idx_diff}px;
     color: #2ecc71;
-}
-QLabel#IndexDiffFlat {
-    font-size: 13px;
+}}
+QLabel#IndexDiffFlat {{
+    font-size: {f_idx_diff}px;
     color: #9aa0a6;
-}
-QFrame#Separator {
+}}
+QFrame#Separator {{
     background-color: rgba(255, 255, 255, 30);
     max-height: 1px;
     min-height: 1px;
-}
-QLabel#StatusError {
+}}
+QLabel#StatusError {{
     color: #ff5a5f;
-    font-size: 11px;
-}
-QLabel#StatusOK {
+    font-size: {f_small}px;
+}}
+QLabel#StatusOK {{
     color: #6b7280;
-    font-size: 11px;
-}
-QWidget#PriceRow:hover {
+    font-size: {f_small}px;
+}}
+QLabel#ColHeader {{
+    color: #6b7280;
+    font-size: {f_small}px;
+}}
+QWidget#PriceRow:hover {{
     background-color: rgba(255, 255, 255, 16);
-    border-radius: 6px;
-}
-QLabel#SellPrice {
-    color: #ffb86b;
-    font-weight: 600;
-}
-QLabel#BidPrice {
-    color: #74c7ec;
-}
-QLabel#ColHeader {
-    color: #6b7280;
-    font-size: 11px;
-}
-QPushButton#CloseBtn, QPushButton#RefreshBtn {
+    border-radius: 5px;
+}}
+QPushButton#CloseBtn, QPushButton#RefreshBtn {{
     background-color: transparent;
     color: #9aa0a6;
     border: none;
-    font-size: 14px;
-    padding: 0 4px;
-}
-QPushButton#CloseBtn:hover {
+    font-size: {f_btn}px;
+    padding: 0 3px;
+}}
+QPushButton#CloseBtn:hover {{
     color: #ff5a5f;
-}
-QPushButton#RefreshBtn:hover {
+}}
+QPushButton#RefreshBtn:hover {{
     color: #74c7ec;
-}
-QPushButton#RefreshBtn:disabled {
-    color: #4b5563;
-}
+}}
 """
 
 
 class FloatingWindow(QWidget):
     request_refresh = pyqtSignal()
     request_add = pyqtSignal()
-    request_remove = pyqtSignal(str)  # marketHashName
+    request_remove = pyqtSignal(str)         # marketHashName
+    request_set_quantity = pyqtSignal(str)   # marketHashName
+    settings_changed = pyqtSignal()          # show_bid / ui_scale 变更后通知 main 持久化
 
-    def __init__(self, items: list[WatchItem]):
+    def __init__(self, items: list[WatchItem], *, show_bid: bool = True, ui_scale: float = 1.0):
         super().__init__()
-        # 注意：故意不加 Qt.Tool —— 在 macOS 上 Tool 会被映射为 NSPanel，
-        # NSPanel 默认 hidesOnDeactivate=YES，导致切换到别的 App 时悬浮窗自动隐藏。
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumWidth(420)
 
+        self._show_bid = show_bid
+        self._scale = max(SCALE_MIN, min(SCALE_MAX, ui_scale))
         self._drag_offset: QPoint | None = None
         self._rows: dict[str, PriceRow] = {}
+
         self._status_timer = QTimer(self)
         self._status_timer.setSingleShot(True)
         self._status_timer.timeout.connect(lambda: self.status_label.setText(""))
 
         self._build_ui()
-        self.setStyleSheet(STYLE)
+        self._register_shortcuts()
         self.rebuild_rows(items)
+        self._apply_scale()
+        self._apply_bid_visibility()
 
     # ----- UI construction -----
 
@@ -138,23 +164,23 @@ class FloatingWindow(QWidget):
         outer.addWidget(root)
 
         v = QVBoxLayout(root)
-        v.setContentsMargins(14, 12, 14, 12)
-        v.setSpacing(6)
+        v.setContentsMargins(10, 8, 10, 8)
+        v.setSpacing(4)
 
-        # 顶栏：标题 + 刷新按钮 + 关闭按钮
+        # 顶栏
         header = QHBoxLayout()
         header.setSpacing(4)
         title = QLabel("dust2.cc")
         title.setObjectName("Title")
         header.addWidget(title)
         self.last_refresh_label = QLabel("")
-        self.last_refresh_label.setObjectName("StatusOK")
+        self.last_refresh_label.setObjectName("RefreshClock")
         header.addWidget(self.last_refresh_label)
         header.addStretch(1)
 
         self.refresh_btn = QPushButton("⟳")
         self.refresh_btn.setObjectName("RefreshBtn")
-        self.refresh_btn.setFixedSize(22, 22)
+        self.refresh_btn.setFixedSize(20, 20)
         self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.refresh_btn.setToolTip("立即刷新")
         self.refresh_btn.clicked.connect(self.request_refresh.emit)
@@ -162,21 +188,26 @@ class FloatingWindow(QWidget):
 
         self.close_btn = QPushButton("×")
         self.close_btn.setObjectName("CloseBtn")
-        self.close_btn.setFixedSize(22, 22)
+        self.close_btn.setFixedSize(20, 20)
         self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.close_btn.clicked.connect(QApplication.instance().quit)
         header.addWidget(self.close_btn)
         v.addLayout(header)
 
-        # 大盘指数行
+        # 大盘指数 + 持仓
         idx_row = QHBoxLayout()
-        idx_row.setSpacing(10)
+        idx_row.setSpacing(8)
         self.index_label = QLabel("--")
         self.index_label.setObjectName("IndexValue")
         idx_row.addWidget(self.index_label)
         self.index_diff_label = QLabel("")
         self.index_diff_label.setObjectName("IndexDiffFlat")
         idx_row.addWidget(self.index_diff_label)
+        self.portfolio_label = QLabel("")
+        self.portfolio_label.setObjectName("PortfolioValue")
+        self.portfolio_label.setVisible(False)
+        self.portfolio_label.setToolTip("持仓总价值 = Σ 在售价 × 持仓数量")
+        idx_row.addWidget(self.portfolio_label)
         idx_row.addStretch(1)
         v.addLayout(idx_row)
 
@@ -186,26 +217,24 @@ class FloatingWindow(QWidget):
         sep.setFixedHeight(1)
         v.addWidget(sep)
 
-        # 列表表头
+        # 列头
         head_row = QHBoxLayout()
-        head_row.setContentsMargins(10, 2, 10, 2)
-        head_row.setSpacing(8)
-        col_name = QLabel("收藏饰品")
-        col_name.setObjectName("ColHeader")
-        col_sell = QLabel("在售")
-        col_sell.setObjectName("ColHeader")
-        col_sell.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        col_sell.setMinimumWidth(110)
-        col_bid = QLabel("求购")
-        col_bid.setObjectName("ColHeader")
-        col_bid.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        col_bid.setMinimumWidth(110)
-        head_row.addWidget(col_name, stretch=1)
-        head_row.addWidget(col_sell)
-        head_row.addWidget(col_bid)
+        head_row.setContentsMargins(8, 0, 8, 0)
+        head_row.setSpacing(6)
+        self.col_name = QLabel("收藏饰品")
+        self.col_name.setObjectName("ColHeader")
+        self.col_sell = QLabel("在售")
+        self.col_sell.setObjectName("ColHeader")
+        self.col_sell.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.col_bid = QLabel("求购")
+        self.col_bid.setObjectName("ColHeader")
+        self.col_bid.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        head_row.addWidget(self.col_name, stretch=1)
+        head_row.addWidget(self.col_sell)
+        head_row.addWidget(self.col_bid)
         v.addLayout(head_row)
 
-        # 饰品行容器
+        # 饰品行
         self.rows_layout = QVBoxLayout()
         self.rows_layout.setSpacing(0)
         self.rows_layout.setContentsMargins(0, 0, 0, 0)
@@ -214,7 +243,7 @@ class FloatingWindow(QWidget):
         self.empty_label = QLabel("右键 → 添加饰品")
         self.empty_label.setObjectName("StatusOK")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty_label.setContentsMargins(0, 6, 0, 6)
+        self.empty_label.setContentsMargins(0, 4, 0, 4)
         v.addWidget(self.empty_label)
 
         # 状态栏
@@ -222,11 +251,22 @@ class FloatingWindow(QWidget):
         self.status_label.setObjectName("StatusOK")
         v.addWidget(self.status_label)
 
+    def _register_shortcuts(self) -> None:
+        # 跨平台：Qt 自动把 Ctrl 映射成 macOS 的 Cmd
+        QShortcut(QKeySequence.StandardKey.ZoomIn, self).activated.connect(self.zoom_in)
+        QShortcut(QKeySequence("Ctrl+="), self).activated.connect(self.zoom_in)  # 防止 +/- 键位差异
+        QShortcut(QKeySequence.StandardKey.ZoomOut, self).activated.connect(self.zoom_out)
+        QShortcut(QKeySequence("Ctrl+0"), self).activated.connect(self.zoom_reset)
+
     # ----- Public update API -----
 
     def set_index(self, idx: BroadIndex) -> None:
         self.index_label.setText(f"{idx.value:,.2f}")
-        ratio_pct = idx.diff_yesterday_ratio * 100 if abs(idx.diff_yesterday_ratio) < 1 else idx.diff_yesterday_ratio
+        ratio_pct = (
+            idx.diff_yesterday_ratio * 100
+            if abs(idx.diff_yesterday_ratio) < 1
+            else idx.diff_yesterday_ratio
+        )
         if idx.diff_yesterday > 0:
             self.index_diff_label.setObjectName("IndexDiffUp")
             text = f"▲ {idx.diff_yesterday:+.2f}  {ratio_pct:+.2f}%"
@@ -237,17 +277,28 @@ class FloatingWindow(QWidget):
             self.index_diff_label.setObjectName("IndexDiffFlat")
             text = "— 0.00  0.00%"
         self.index_diff_label.setText(text)
-        # 强制重新应用 QSS（objectName 变化）
         self.index_diff_label.style().unpolish(self.index_diff_label)
         self.index_diff_label.style().polish(self.index_diff_label)
 
     def set_prices(self, prices: dict[str, YouPinPrice]) -> None:
         for name, row in self._rows.items():
             row.set_price(prices.get(name))
-        self.last_refresh_label.setText(f"  · {datetime.now().strftime('%H:%M:%S')}")
+        self.last_refresh_label.setText(f"· {datetime.now().strftime('%H:%M:%S')}")
+
+    def set_portfolio_value(self, total: float | None) -> None:
+        if total is None or total <= 0:
+            self.portfolio_label.setText("")
+            self.portfolio_label.setVisible(False)
+        else:
+            self.portfolio_label.setText(f"持仓 ¥{total:,.2f}")
+            self.portfolio_label.setVisible(True)
+
+    def refresh_row_quantity(self, market_hash_name: str) -> None:
+        row = self._rows.get(market_hash_name)
+        if row is not None:
+            row.refresh_quantity()
 
     def rebuild_rows(self, items: list[WatchItem]) -> None:
-        # 清空旧行
         while self.rows_layout.count():
             child = self.rows_layout.takeAt(0)
             w = child.widget()
@@ -257,7 +308,8 @@ class FloatingWindow(QWidget):
         self._rows.clear()
 
         for it in items:
-            row = PriceRow(it)
+            row = PriceRow(it, scale=self._scale)
+            row.set_bid_visible(self._show_bid)
             row.right_clicked.connect(self._on_row_right_clicked)
             self.rows_layout.addWidget(row)
             self._rows[it.marketHashName] = row
@@ -273,7 +325,55 @@ class FloatingWindow(QWidget):
         if timeout_ms > 0:
             self._status_timer.start(timeout_ms)
 
-    # ----- Drag to move -----
+    # ----- 缩放 -----
+
+    def zoom_in(self) -> None:
+        self._set_scale(self._scale + SCALE_STEP)
+
+    def zoom_out(self) -> None:
+        self._set_scale(self._scale - SCALE_STEP)
+
+    def zoom_reset(self) -> None:
+        self._set_scale(1.0)
+
+    def current_scale(self) -> float:
+        return self._scale
+
+    def _set_scale(self, scale: float) -> None:
+        scale = round(max(SCALE_MIN, min(SCALE_MAX, scale)), 2)
+        if abs(scale - self._scale) < 0.005:
+            return
+        self._scale = scale
+        self._apply_scale()
+        self.settings_changed.emit()
+
+    def _apply_scale(self) -> None:
+        self.setStyleSheet(_build_style(self._scale))
+        # 全窗最小宽度按 scale 伸缩
+        self.setMinimumWidth(int(380 * self._scale))
+        for row in self._rows.values():
+            row.apply_scale(self._scale)
+        self.adjustSize()
+
+    # ----- 求购列开关 -----
+
+    def show_bid_enabled(self) -> bool:
+        return self._show_bid
+
+    def set_show_bid(self, show: bool) -> None:
+        if show == self._show_bid:
+            return
+        self._show_bid = show
+        self._apply_bid_visibility()
+        self.settings_changed.emit()
+
+    def _apply_bid_visibility(self) -> None:
+        self.col_bid.setVisible(self._show_bid)
+        for row in self._rows.values():
+            row.set_bid_visible(self._show_bid)
+        self.adjustSize()
+
+    # ----- 拖动 -----
 
     def mousePressEvent(self, event):  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
@@ -288,7 +388,7 @@ class FloatingWindow(QWidget):
     def mouseReleaseEvent(self, event):  # noqa: N802
         self._drag_offset = None
 
-    # ----- Context menu -----
+    # ----- 右键菜单 -----
 
     def contextMenuEvent(self, event):  # noqa: N802
         self._open_menu(event.globalPos(), hovered_name=None)
@@ -300,8 +400,9 @@ class FloatingWindow(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet(
             "QMenu { background: #2a2d35; color: #e6e6e6; border-radius: 6px; padding: 4px; }"
-            "QMenu::item { padding: 6px 18px; border-radius: 4px; }"
+            "QMenu::item { padding: 5px 18px; border-radius: 4px; }"
             "QMenu::item:selected { background: #3a3e48; }"
+            "QMenu::separator { height: 1px; background: rgba(255,255,255,30); margin: 3px 6px; }"
         )
 
         add_action = QAction("添加饰品…", self)
@@ -309,15 +410,42 @@ class FloatingWindow(QWidget):
         menu.addAction(add_action)
 
         if hovered_name:
-            label = hovered_name
             row = self._rows.get(hovered_name)
-            if row is not None:
-                label = row.item.label()
+            label = row.item.label() if row is not None else hovered_name
+            qty = row.item.quantity if row is not None else 0
+
+            qty_action = QAction(f"持仓数量…（当前 {qty}）", self)
+            qty_action.triggered.connect(lambda: self.request_set_quantity.emit(hovered_name))
+            menu.addAction(qty_action)
+
             rm = QAction(f"删除：{label}", self)
             rm.triggered.connect(lambda: self.request_remove.emit(hovered_name))
             menu.addAction(rm)
 
         menu.addSeparator()
+
+        # 显示求购价 开关
+        bid_action = QAction("显示求购价", self)
+        bid_action.setCheckable(True)
+        bid_action.setChecked(self._show_bid)
+        bid_action.triggered.connect(self.set_show_bid)
+        menu.addAction(bid_action)
+
+        # 缩放
+        zoom_in_action = QAction("放大  (Cmd +)", self)
+        zoom_in_action.triggered.connect(self.zoom_in)
+        menu.addAction(zoom_in_action)
+
+        zoom_out_action = QAction("缩小  (Cmd -)", self)
+        zoom_out_action.triggered.connect(self.zoom_out)
+        menu.addAction(zoom_out_action)
+
+        zoom_reset_action = QAction(f"重置缩放  ({int(self._scale * 100)}%)", self)
+        zoom_reset_action.triggered.connect(self.zoom_reset)
+        menu.addAction(zoom_reset_action)
+
+        menu.addSeparator()
+
         refresh = QAction("立即刷新", self)
         refresh.triggered.connect(self.request_refresh.emit)
         menu.addAction(refresh)
@@ -328,7 +456,7 @@ class FloatingWindow(QWidget):
 
         menu.exec(pos)
 
-    # ----- Geometry persistence helpers -----
+    # ----- 位置持久化 -----
 
     def restore_position(self, pos: dict | None) -> None:
         if not pos:

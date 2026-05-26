@@ -8,7 +8,7 @@ import traceback
 from PyQt6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMessageBox
 
 from price_worker import PriceWorkerController
-from steamdt_client import SteamDTClient, SteamDTError
+from steamdt_client import SteamDTClient, SteamDTError, YouPinPrice
 from ui.add_dialog import AddDialog
 from ui.floating_window import FloatingWindow
 from watchlist import (
@@ -18,6 +18,7 @@ from watchlist import (
     load_watchlist,
     remove_item,
     update_config,
+    update_quantity,
 )
 
 
@@ -46,18 +47,26 @@ class AppController:
     def __init__(self, client: SteamDTClient):
         self.client = client
         self.items: list[WatchItem] = load_watchlist()
-        self.window = FloatingWindow(self.items)
-        self.window.restore_position(load_config().get("window_pos"))
+        self._latest_prices: dict[str, YouPinPrice] = {}
+
+        cfg = load_config()
+        show_bid = bool(cfg.get("show_bid", True))
+        ui_scale = float(cfg.get("ui_scale", 1.0))
+
+        self.window = FloatingWindow(self.items, show_bid=show_bid, ui_scale=ui_scale)
+        self.window.restore_position(cfg.get("window_pos"))
 
         self.worker = PriceWorkerController(client, interval_sec=REFRESH_INTERVAL_SEC)
         self.worker.set_names([i.marketHashName for i in self.items])
         self.worker.worker.index_ready.connect(self.window.set_index)
-        self.worker.worker.prices_ready.connect(self.window.set_prices)
+        self.worker.worker.prices_ready.connect(self._on_prices_ready)
         self.worker.worker.error.connect(lambda msg: self.window.show_status(msg, is_error=True))
 
         self.window.request_refresh.connect(self._on_refresh)
         self.window.request_add.connect(self._on_add)
         self.window.request_remove.connect(self._on_remove)
+        self.window.request_set_quantity.connect(self._on_set_quantity)
+        self.window.settings_changed.connect(self._on_settings_changed)
 
         app = QApplication.instance()
         app.aboutToQuit.connect(self._on_quit)
@@ -65,6 +74,26 @@ class AppController:
     def start(self) -> None:
         self.window.show()
         self.worker.start()
+
+    # ---- 信号回调 ----
+
+    def _on_prices_ready(self, prices: dict[str, YouPinPrice]) -> None:
+        # 合并保留旧值，防止个别字段缺失时持仓总价闪烁为 0
+        for name, p in prices.items():
+            if p is not None:
+                self._latest_prices[name] = p
+        self.window.set_prices(prices)
+        self.window.set_portfolio_value(self._compute_portfolio())
+
+    def _compute_portfolio(self) -> float:
+        total = 0.0
+        for it in self.items:
+            if it.quantity <= 0:
+                continue
+            p = self._latest_prices.get(it.marketHashName)
+            if p and p.sell_price is not None:
+                total += p.sell_price * it.quantity
+        return total
 
     def _on_refresh(self) -> None:
         self.window.show_status("刷新中…", is_error=False, timeout_ms=2000)
@@ -93,9 +122,44 @@ class AppController:
         self.items = remove_item(self.items, market_hash_name)
         self.window.rebuild_rows(self.items)
         self.worker.set_names([i.marketHashName for i in self.items])
+        self.window.set_portfolio_value(self._compute_portfolio())
+
+    def _on_set_quantity(self, market_hash_name: str) -> None:
+        current = next(
+            (it.quantity for it in self.items if it.marketHashName == market_hash_name),
+            0,
+        )
+        label = next(
+            (it.label() for it in self.items if it.marketHashName == market_hash_name),
+            market_hash_name,
+        )
+        qty, ok = QInputDialog.getInt(
+            self.window,
+            "持仓数量",
+            f"{label}\n\n持有数量（0 表示仅关注、不计入持仓总价）：",
+            value=int(current),
+            min=0,
+            max=99999,
+            step=1,
+        )
+        if not ok:
+            return
+        self.items = update_quantity(self.items, market_hash_name, qty)
+        self.window.refresh_row_quantity(market_hash_name)
+        self.window.set_portfolio_value(self._compute_portfolio())
+
+    def _on_settings_changed(self) -> None:
+        update_config(
+            show_bid=self.window.show_bid_enabled(),
+            ui_scale=self.window.current_scale(),
+        )
 
     def _on_quit(self) -> None:
-        update_config(window_pos=self.window.current_position())
+        update_config(
+            window_pos=self.window.current_position(),
+            show_bid=self.window.show_bid_enabled(),
+            ui_scale=self.window.current_scale(),
+        )
         self.worker.stop()
 
 

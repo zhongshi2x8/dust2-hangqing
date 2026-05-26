@@ -15,6 +15,7 @@ WATCHLIST_PATH = CONFIG_DIR / "watchlist.json"
 class WatchItem:
     marketHashName: str
     displayName: str = ""
+    quantity: int = 0  # 持仓数量，0 = 仅关注、不计入持仓总价
 
     def label(self) -> str:
         return self.displayName or self.marketHashName
@@ -59,10 +60,15 @@ def load_watchlist() -> list[WatchItem]:
         if isinstance(entry, str):
             items.append(WatchItem(marketHashName=entry))
         elif isinstance(entry, dict) and entry.get("marketHashName"):
+            try:
+                qty = int(entry.get("quantity", 0))
+            except (TypeError, ValueError):
+                qty = 0
             items.append(
                 WatchItem(
                     marketHashName=entry["marketHashName"],
                     displayName=entry.get("displayName", ""),
+                    quantity=max(0, qty),
                 )
             )
     return items
@@ -86,5 +92,14 @@ def add_item(items: list[WatchItem], new: WatchItem) -> list[WatchItem]:
 
 def remove_item(items: list[WatchItem], market_hash_name: str) -> list[WatchItem]:
     items = [i for i in items if i.marketHashName != market_hash_name]
+    save_watchlist(items)
+    return items
+
+
+def update_quantity(items: list[WatchItem], market_hash_name: str, qty: int) -> list[WatchItem]:
+    for it in items:
+        if it.marketHashName == market_hash_name:
+            it.quantity = max(0, int(qty))
+            break
     save_watchlist(items)
     return items
