@@ -12,12 +12,12 @@
 
 ## 📥 下载（双击即用，无需装 Python）
 
-> 最新版本：[**v1.2.1**](https://github.com/zhongshi2x8/dust2-hangqing/releases/tag/v1.2.1) — UI 透气化（行间距 + 价格字号）
+> 最新版本：[**v1.3.0**](https://github.com/zhongshi2x8/dust2-hangqing/releases/tag/v1.3.0) — 持仓盈亏（成本价 + 红涨绿跌盈亏徽章）
 
 | 平台 | 文件 | 大小 | 直链 |
 | --- | --- | --- | --- |
-| 🍎 **macOS (Apple Silicon)** | `CS2-Quote-macOS-arm64.zip` | 28 MB | [⬇️ 下载 v1.2.1](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.2.1/CS2-Quote-macOS-arm64.zip) |
-| 🪟 **Windows** | `CS2-Quote-Windows.exe` | 38 MB | [⬇️ 下载 v1.2.1](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.2.1/CS2-Quote-Windows.exe) |
+| 🍎 **macOS (Apple Silicon)** | `CS2-Quote-macOS-arm64.zip` | 28 MB | [⬇️ 下载 v1.3.0](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.3.0/CS2-Quote-macOS-arm64.zip) |
+| 🪟 **Windows** | `CS2-Quote-Windows.exe` | 38 MB | [⬇️ 下载 v1.3.0](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.3.0/CS2-Quote-Windows.exe) |
 
 > Intel Mac 用户请[自行从源码构建](#-从源码构建)。
 > 全部历史版本见 [Releases 页面](https://github.com/zhongshi2x8/dust2-hangqing/releases)。
@@ -60,7 +60,7 @@
 ## ✨ 功能亮点
 
 - **大盘指数**：顶部展示 CS2 broad market index + 较昨日涨跌（▲ / ▼）
-- **持仓追踪**：每件饰品可设置数量，大盘指数右侧实时显示总持仓价值
+- **持仓追踪 + 盈亏**：每件饰品可设置持有数量 + 成本单价，顶栏实时显示持仓总价 + 红涨绿跌的盈亏徽章
 - **YOUPIN 实时价格**：每个收藏饰品的在售价 + 求购价（求购列可一键隐藏，隐藏后涨跌幅内联到价格旁）
 - **红涨绿跌**：按国内行情习惯着色，价格下方/旁边一行带 ▲▼ 符号显示绝对涨幅 + 百分比
 - **联想搜索**：内置 **39,166 件**饰品字典，支持中英文模糊匹配，无需联网查字典
