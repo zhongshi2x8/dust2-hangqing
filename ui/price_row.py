@@ -96,8 +96,8 @@ class PriceRow(QWidget):
         self.bid_wrap.setLayout(bid_box)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 2, 8, 2)
-        layout.setSpacing(6)
+        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setSpacing(10)
         layout.addWidget(name_wrap, stretch=1)
         layout.addWidget(self.sell_wrap)
         layout.addWidget(self.bid_wrap)
@@ -161,24 +161,26 @@ class PriceRow(QWidget):
         delta = new - prev
         pct = (delta / prev * 100) if prev else 0.0
 
+        # 持平：不再显示 "—" 占位，只保留价格本身，让视觉聚焦在真正变动的行
         if abs(delta) < 0.005:
-            color = COLOR_PRICE_NEUTRAL
-            arrow_text = "—"
-            arrow_color = COLOR_FLAT
-        elif delta > 0:
+            val_label.setText(f"¥{new:.2f}")
+            val_label.setStyleSheet(f"color: {COLOR_PRICE_NEUTRAL}; font-weight: 600;")
+            diff_label.setText("")
+            diff_label.setStyleSheet("")
+            return
+
+        if delta > 0:
             color = COLOR_UP
             arrow_text = f"▲ {delta:+.2f} {pct:+.2f}%"
-            arrow_color = COLOR_UP
         else:
             color = COLOR_DOWN
             arrow_text = f"▼ {delta:+.2f} {pct:+.2f}%"
-            arrow_color = COLOR_DOWN
 
         if inline:
             # 单行：价格 + 涨跌幅小字 内联
             val_label.setText(
                 f'<span style="color:{color};font-weight:600;">¥{new:.2f}</span>'
-                f' <span style="color:{arrow_color};font-size:{SMALL_FONT}px;font-weight:600;">'
+                f' <span style="color:{color};font-size:{SMALL_FONT}px;font-weight:600;">'
                 f'{arrow_text}</span>'
             )
             val_label.setStyleSheet("")  # 让 rich text 自己控
@@ -188,7 +190,7 @@ class PriceRow(QWidget):
             val_label.setStyleSheet(f"color: {color}; font-weight: 600;")
             diff_label.setText(arrow_text)
             diff_label.setStyleSheet(
-                f"color: {arrow_color}; font-size: {SMALL_FONT}px; font-weight: 600;"
+                f"color: {color}; font-size: {SMALL_FONT}px; font-weight: 600;"
             )
 
     # ----- 求购列显隐 / 内联模式 -----
@@ -224,10 +226,10 @@ class PriceRow(QWidget):
         self._scale = scale
         self.name_label.setMinimumWidth(int(NAME_MIN_W * scale))
         self._apply_widths()
-        m = max(1, int(2 * scale))
-        side = max(4, int(8 * scale))
+        m = max(3, int(6 * scale))
+        side = max(6, int(10 * scale))
         self.layout().setContentsMargins(side, m, side, m)
-        self.layout().setSpacing(max(3, int(6 * scale)))
+        self.layout().setSpacing(max(5, int(10 * scale)))
 
     def contextMenuEvent(self, event):  # noqa: N802
         self.right_clicked.emit(self.item.marketHashName)

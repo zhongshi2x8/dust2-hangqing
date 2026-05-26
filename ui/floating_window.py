@@ -55,8 +55,10 @@ DEFAULT_REFRESH_SEC = 180
 
 
 def _build_style(s: float, bg_alpha: int = DEFAULT_BG_ALPHA) -> str:
-    """根据 scale 生成 QSS。s=1.0 是紧凑默认尺寸；放大缩小线性插值。"""
-    f_base = int(12 * s)
+    """根据 scale 生成 QSS。s=1.0 是默认尺寸；放大缩小线性插值。"""
+    f_base = int(13 * s)
+    f_name = int(13 * s)
+    f_price = int(14 * s)
     f_small = int(10 * s)
     f_title = int(11 * s)
     f_idx = int(20 * s)
@@ -76,6 +78,14 @@ QLabel#Title {{
     font-size: {f_title}px;
     color: #9aa0a6;
     letter-spacing: 1px;
+}}
+QLabel#RowName {{
+    font-size: {f_name}px;
+    color: #e6e6e6;
+}}
+QLabel#SellPrice, QLabel#BidPrice {{
+    font-size: {f_price}px;
+    font-weight: 600;
 }}
 QLabel#RefreshClock {{
     font-size: {f_small}px;
@@ -195,8 +205,8 @@ class FloatingWindow(QWidget):
         outer.addWidget(root)
 
         v = QVBoxLayout(root)
-        v.setContentsMargins(10, 8, 10, 8)
-        v.setSpacing(4)
+        v.setContentsMargins(12, 10, 12, 10)
+        v.setSpacing(6)
 
         # 顶栏
         header = QHBoxLayout()
