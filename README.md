@@ -12,12 +12,12 @@
 
 ## 📥 下载（双击即用，无需装 Python）
 
-> 最新版本：[**v1.0.1**](https://github.com/zhongshi2x8/dust2-hangqing/releases/tag/v1.0.1)
+> 最新版本：[**v1.1.0**](https://github.com/zhongshi2x8/dust2-hangqing/releases/tag/v1.1.0) — 新增持仓追踪、紧凑模式、窗口缩放
 
 | 平台 | 文件 | 大小 | 直链 |
 | --- | --- | --- | --- |
-| 🍎 **macOS (Apple Silicon)** | `CS2-Quote-macOS-arm64.zip` | 26 MB | [⬇️ 下载 v1.0.1](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.0.1/CS2-Quote-macOS-arm64.zip) |
-| 🪟 **Windows** | `CS2-Quote-Windows.exe` | 40 MB | [⬇️ 下载 v1.0.1](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.0.1/CS2-Quote-Windows.exe) |
+| 🍎 **macOS (Apple Silicon)** | `CS2-Quote-macOS-arm64.zip` | 26 MB | [⬇️ 下载 v1.1.0](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.1.0/CS2-Quote-macOS-arm64.zip) |
+| 🪟 **Windows** | `CS2-Quote-Windows.exe` | 40 MB | [⬇️ 下载 v1.0.1](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.0.1/CS2-Quote-Windows.exe) <sup>v1.1.0 Windows 构建中</sup> |
 
 > Intel Mac 用户请[自行从源码构建](#-从源码构建)。
 > 全部历史版本见 [Releases 页面](https://github.com/zhongshi2x8/dust2-hangqing/releases)。
@@ -44,21 +44,26 @@
 
 - **拖动**：鼠标按住悬浮窗任意位置即可拖到桌面任意位置（关闭时自动记忆位置）
 - **手动刷新**：标题栏 `⟳` 按钮
+- **缩放**：`Cmd +` 放大 / `Cmd -` 缩小 / `Cmd 0` 重置（Windows 上是 Ctrl）
 - **右键菜单**：
-  - 添加饰品：弹出搜索框，输入中英文关键词（空格分隔多词）进行联想搜索，例如 `AK 红线` / `AK Redline FT`
+  - 添加饰品：联想搜索，输入中英文关键词（空格分隔多词），例如 `AK 红线` / `AK Redline FT`
+  - 持仓数量：设置该饰品的持有量，参与持仓总价计算
   - 删除：右键单击某一行饰品时菜单中会出现"删除：xxx"
-  - 立即刷新：强制拉取最新价格
-  - 退出：关闭程序
+  - 显示求购价：开关，关掉只看在售价、窗口更窄
+  - 放大 / 缩小 / 重置缩放
+  - 立即刷新 / 退出
 
 ---
 
 ## ✨ 功能亮点
 
 - **大盘指数**：顶部展示 CS2 broad market index + 较昨日涨跌（▲ / ▼）
-- **YOUPIN 实时价格**：每个收藏饰品的在售价 + 求购价
+- **持仓追踪**：每件饰品可设置数量，大盘指数右侧实时显示总持仓价值
+- **YOUPIN 实时价格**：每个收藏饰品的在售价 + 求购价（求购列可一键隐藏）
 - **红涨绿跌**：按国内行情习惯着色，价格下方一行带 ▲▼ 符号显示绝对涨幅 + 百分比
 - **联想搜索**：内置 **39,166 件**饰品字典，支持中英文模糊匹配，无需联网查字典
 - **3 分钟自动刷新** + 手动刷新按钮
+- **窗口缩放**：右键菜单或 `Cmd ±` / `Cmd 0` 调整 80%~160%
 - **常驻桌面**：无边框、置顶、半透明深色风格，切换 App 时不会自动隐藏
 
 ---

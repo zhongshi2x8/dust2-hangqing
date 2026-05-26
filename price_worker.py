@@ -64,6 +64,11 @@ class PriceWorkerController:
         self.timer.start()
         self.trigger_now()
 
+    def set_interval_sec(self, sec: int) -> None:
+        """运行时调整轮询周期（秒），最低 60s 受 SteamDT batch 限制。"""
+        sec = max(60, int(sec))
+        self.timer.setInterval(sec * 1000)
+
     def trigger_now(self) -> None:
         QMetaObject.invokeMethod(
             self.worker, "fetch_once", Qt.ConnectionType.QueuedConnection

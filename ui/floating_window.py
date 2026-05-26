@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from steamdt_client import BroadIndex, YouPinPrice
-from ui.price_row import PriceRow
+from ui.price_row import PRICE_INLINE_MIN_W, PRICE_MIN_W, PriceRow
 from watchlist import WatchItem
 
 
@@ -33,8 +33,28 @@ SCALE_MIN = 0.8
 SCALE_MAX = 1.6
 SCALE_STEP = 0.1
 
+# 透明度档位（背景 alpha 0-255 + 显示名）
+OPACITY_PRESETS: list[tuple[int, str]] = [
+    (255, "不透明 100%"),
+    (220, "高 85%"),
+    (180, "中 70%"),
+    (140, "低 55%"),
+    (100, "极低 40%"),
+]
+DEFAULT_BG_ALPHA = 220
 
-def _build_style(s: float) -> str:
+# 刷新间隔档位（秒 + 显示名）。最低 60s 受 SteamDT /price/batch 每分钟 1 次限制约束
+REFRESH_PRESETS: list[tuple[int, str]] = [
+    (60, "1 分钟"),
+    (180, "3 分钟"),
+    (300, "5 分钟"),
+    (600, "10 分钟"),
+    (1800, "30 分钟"),
+]
+DEFAULT_REFRESH_SEC = 180
+
+
+def _build_style(s: float, bg_alpha: int = DEFAULT_BG_ALPHA) -> str:
     """根据 scale 生成 QSS。s=1.0 是紧凑默认尺寸；放大缩小线性插值。"""
     f_base = int(12 * s)
     f_small = int(10 * s)
@@ -45,7 +65,7 @@ def _build_style(s: float) -> str:
     radius = max(6, int(10 * s))
     return f"""
 QWidget#Root {{
-    background-color: rgba(20, 22, 28, 220);
+    background-color: rgba(20, 22, 28, {bg_alpha});
     border-radius: {radius}px;
 }}
 QLabel {{
@@ -128,9 +148,18 @@ class FloatingWindow(QWidget):
     request_add = pyqtSignal()
     request_remove = pyqtSignal(str)         # marketHashName
     request_set_quantity = pyqtSignal(str)   # marketHashName
-    settings_changed = pyqtSignal()          # show_bid / ui_scale 变更后通知 main 持久化
+    request_interval_change = pyqtSignal(int)  # 新刷新间隔（秒）
+    settings_changed = pyqtSignal()          # show_bid / ui_scale / bg_alpha 变更后持久化
 
-    def __init__(self, items: list[WatchItem], *, show_bid: bool = True, ui_scale: float = 1.0):
+    def __init__(
+        self,
+        items: list[WatchItem],
+        *,
+        show_bid: bool = True,
+        ui_scale: float = 1.0,
+        bg_alpha: int = DEFAULT_BG_ALPHA,
+        refresh_sec: int = DEFAULT_REFRESH_SEC,
+    ):
         super().__init__()
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -140,6 +169,8 @@ class FloatingWindow(QWidget):
 
         self._show_bid = show_bid
         self._scale = max(SCALE_MIN, min(SCALE_MAX, ui_scale))
+        self._bg_alpha = max(60, min(255, int(bg_alpha)))
+        self._refresh_sec = max(60, int(refresh_sec))
         self._drag_offset: QPoint | None = None
         self._rows: dict[str, PriceRow] = {}
 
@@ -348,12 +379,20 @@ class FloatingWindow(QWidget):
         self.settings_changed.emit()
 
     def _apply_scale(self) -> None:
-        self.setStyleSheet(_build_style(self._scale))
+        self.setStyleSheet(_build_style(self._scale, self._bg_alpha))
         # 全窗最小宽度按 scale 伸缩
         self.setMinimumWidth(int(380 * self._scale))
         for row in self._rows.values():
             row.apply_scale(self._scale)
+        self._apply_header_widths()
         self.adjustSize()
+
+    def _apply_header_widths(self) -> None:
+        """列头宽度跟随 PriceRow 的 sell_wrap / bid_wrap 同步，避免 在售/求购 标签挤一起。"""
+        sell_w = (PRICE_INLINE_MIN_W if not self._show_bid else PRICE_MIN_W) * self._scale
+        bid_w = PRICE_MIN_W * self._scale
+        self.col_sell.setMinimumWidth(int(sell_w))
+        self.col_bid.setMinimumWidth(int(bid_w))
 
     # ----- 求购列开关 -----
 
@@ -371,7 +410,34 @@ class FloatingWindow(QWidget):
         self.col_bid.setVisible(self._show_bid)
         for row in self._rows.values():
             row.set_bid_visible(self._show_bid)
+        self._apply_header_widths()
         self.adjustSize()
+
+    # ----- 透明度 -----
+
+    def current_bg_alpha(self) -> int:
+        return self._bg_alpha
+
+    def set_bg_alpha(self, alpha: int) -> None:
+        alpha = max(60, min(255, int(alpha)))
+        if alpha == self._bg_alpha:
+            return
+        self._bg_alpha = alpha
+        self.setStyleSheet(_build_style(self._scale, self._bg_alpha))
+        self.settings_changed.emit()
+
+    # ----- 刷新间隔 -----
+
+    def current_refresh_sec(self) -> int:
+        return self._refresh_sec
+
+    def set_refresh_sec(self, sec: int) -> None:
+        sec = max(60, int(sec))
+        if sec == self._refresh_sec:
+            return
+        self._refresh_sec = sec
+        self.request_interval_change.emit(sec)
+        self.settings_changed.emit()
 
     # ----- 拖动 -----
 
@@ -431,18 +497,35 @@ class FloatingWindow(QWidget):
         bid_action.triggered.connect(self.set_show_bid)
         menu.addAction(bid_action)
 
-        # 缩放
+        # 透明度子菜单
+        opacity_menu = menu.addMenu("透明度")
+        for alpha, label in OPACITY_PRESETS:
+            act = QAction(label, self)
+            act.setCheckable(True)
+            act.setChecked(self._bg_alpha == alpha)
+            act.triggered.connect(lambda _checked=False, a=alpha: self.set_bg_alpha(a))
+            opacity_menu.addAction(act)
+
+        # 刷新间隔 子菜单
+        interval_menu = menu.addMenu(f"刷新间隔  ({self._format_interval(self._refresh_sec)})")
+        for sec, label in REFRESH_PRESETS:
+            act = QAction(label, self)
+            act.setCheckable(True)
+            act.setChecked(self._refresh_sec == sec)
+            act.triggered.connect(lambda _checked=False, s=sec: self.set_refresh_sec(s))
+            interval_menu.addAction(act)
+
+        # 缩放子菜单
+        zoom_menu = menu.addMenu(f"窗口缩放  ({int(self._scale * 100)}%)")
         zoom_in_action = QAction("放大  (Cmd +)", self)
         zoom_in_action.triggered.connect(self.zoom_in)
-        menu.addAction(zoom_in_action)
-
-        zoom_out_action = QAction("缩小  (Cmd -)", self)
+        zoom_menu.addAction(zoom_in_action)
+        zoom_out_action = QAction("缩小  (Cmd −)", self)
         zoom_out_action.triggered.connect(self.zoom_out)
-        menu.addAction(zoom_out_action)
-
-        zoom_reset_action = QAction(f"重置缩放  ({int(self._scale * 100)}%)", self)
+        zoom_menu.addAction(zoom_out_action)
+        zoom_reset_action = QAction("重置 100%", self)
         zoom_reset_action.triggered.connect(self.zoom_reset)
-        menu.addAction(zoom_reset_action)
+        zoom_menu.addAction(zoom_reset_action)
 
         menu.addSeparator()
 
@@ -455,6 +538,12 @@ class FloatingWindow(QWidget):
         menu.addAction(quit_action)
 
         menu.exec(pos)
+
+    @staticmethod
+    def _format_interval(sec: int) -> str:
+        if sec % 60 == 0:
+            return f"{sec // 60} 分钟"
+        return f"{sec} 秒"
 
     # ----- 位置持久化 -----
 

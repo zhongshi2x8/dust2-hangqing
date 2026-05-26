@@ -5,12 +5,13 @@ from __future__ import annotations
 import sys
 import traceback
 
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMessageBox
 
 from price_worker import PriceWorkerController
-from steamdt_client import SteamDTClient, SteamDTError, YouPinPrice
+from steamdt_client import SteamDTClient, SteamDTError, YouPinPrice, _resource_path
 from ui.add_dialog import AddDialog
-from ui.floating_window import FloatingWindow
+from ui.floating_window import DEFAULT_BG_ALPHA, DEFAULT_REFRESH_SEC, FloatingWindow
 from watchlist import (
     WatchItem,
     add_item,
@@ -20,9 +21,6 @@ from watchlist import (
     update_config,
     update_quantity,
 )
-
-
-REFRESH_INTERVAL_SEC = 180
 
 
 def ensure_api_key() -> str:
@@ -52,11 +50,19 @@ class AppController:
         cfg = load_config()
         show_bid = bool(cfg.get("show_bid", True))
         ui_scale = float(cfg.get("ui_scale", 1.0))
+        bg_alpha = int(cfg.get("bg_alpha", DEFAULT_BG_ALPHA))
+        refresh_sec = int(cfg.get("refresh_sec", DEFAULT_REFRESH_SEC))
 
-        self.window = FloatingWindow(self.items, show_bid=show_bid, ui_scale=ui_scale)
+        self.window = FloatingWindow(
+            self.items,
+            show_bid=show_bid,
+            ui_scale=ui_scale,
+            bg_alpha=bg_alpha,
+            refresh_sec=refresh_sec,
+        )
         self.window.restore_position(cfg.get("window_pos"))
 
-        self.worker = PriceWorkerController(client, interval_sec=REFRESH_INTERVAL_SEC)
+        self.worker = PriceWorkerController(client, interval_sec=refresh_sec)
         self.worker.set_names([i.marketHashName for i in self.items])
         self.worker.worker.index_ready.connect(self.window.set_index)
         self.worker.worker.prices_ready.connect(self._on_prices_ready)
@@ -66,6 +72,7 @@ class AppController:
         self.window.request_add.connect(self._on_add)
         self.window.request_remove.connect(self._on_remove)
         self.window.request_set_quantity.connect(self._on_set_quantity)
+        self.window.request_interval_change.connect(self.worker.set_interval_sec)
         self.window.settings_changed.connect(self._on_settings_changed)
 
         app = QApplication.instance()
@@ -152,6 +159,8 @@ class AppController:
         update_config(
             show_bid=self.window.show_bid_enabled(),
             ui_scale=self.window.current_scale(),
+            bg_alpha=self.window.current_bg_alpha(),
+            refresh_sec=self.window.current_refresh_sec(),
         )
 
     def _on_quit(self) -> None:
@@ -159,6 +168,8 @@ class AppController:
             window_pos=self.window.current_position(),
             show_bid=self.window.show_bid_enabled(),
             ui_scale=self.window.current_scale(),
+            bg_alpha=self.window.current_bg_alpha(),
+            refresh_sec=self.window.current_refresh_sec(),
         )
         self.worker.stop()
 
@@ -166,6 +177,11 @@ class AppController:
 def main() -> int:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+
+    # 应用图标（Dock / 任务栏 / 标题栏）
+    icon_path = _resource_path("assets/icon.png")
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
 
     try:
         api_key = ensure_api_key()

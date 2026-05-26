@@ -12,9 +12,13 @@ block_cipher = None
 APP_NAME = "CS2行情"
 ROOT = Path(SPECPATH)
 
-# 把 39k 饰品字典随构建产物一起带走（运行时通过 sys._MEIPASS 读取）
+ICON_MAC = str(ROOT / "assets" / "icon.icns")
+ICON_WIN = str(ROOT / "assets" / "icon.ico")
+
+# 把 39k 饰品字典 + 图标随构建产物一起带走
 datas = [
     (str(ROOT / "base_dict.json"), "."),
+    (str(ROOT / "assets" / "icon.png"), "assets"),
 ]
 
 a = Analysis(
@@ -67,7 +71,7 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name=f"{APP_NAME}.app",
-        icon=None,
+        icon=ICON_MAC,
         bundle_identifier="com.floatinz.cs2quote",
         info_plist={
             "CFBundleDisplayName": APP_NAME,
@@ -91,6 +95,7 @@ else:
         a.datas,
         [],
         name=APP_NAME,
+        icon=ICON_WIN if sys.platform.startswith("win") else None,
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
