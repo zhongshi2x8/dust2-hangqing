@@ -17,7 +17,7 @@
 | 平台 | 文件 | 大小 | 直链 |
 | --- | --- | --- | --- |
 | 🍎 **macOS (Apple Silicon)** | `CS2-Quote-macOS-arm64.zip` | 26 MB | [⬇️ 下载 v1.2.0](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.2.0/CS2-Quote-macOS-arm64.zip) |
-| 🪟 **Windows** | `CS2-Quote-Windows.exe` | 40 MB | [⬇️ 下载 v1.0.1](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.0.1/CS2-Quote-Windows.exe) <sup>v1.2.0 Windows 构建中</sup> |
+| 🪟 **Windows** | `CS2-Quote-Windows.exe` | 40 MB | [⬇️ 下载 v1.2.0](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.2.0/CS2-Quote-Windows.exe) |
 
 > Intel Mac 用户请[自行从源码构建](#-从源码构建)。
 > 全部历史版本见 [Releases 页面](https://github.com/zhongshi2x8/dust2-hangqing/releases)。
@@ -72,6 +72,8 @@
 ---
 
 ## 🛠 从源码构建
+
+> 提示：仓库已配置 [GitHub Actions](.github/workflows/release.yml)，推送 `v*` tag 会**自动**在云端构建 Mac + Windows 双平台二进制并附加到对应 Release，不需要本地手动构建。
 
 ### macOS
 
