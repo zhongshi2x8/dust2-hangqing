@@ -1,0 +1,124 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '已存在的 tag（例如 v1.2.0），用于补构建。'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS (Apple Silicon)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install "pyinstaller>=6.0"
+
+      - name: Build .app
+        run: pyinstaller --noconfirm cs2_quote.spec
+
+      - name: Zip .app with ASCII name
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent "CS2行情.app" "CS2-Quote-macOS-arm64.zip"
+          ls -lh CS2-Quote-macOS-arm64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: dist/CS2-Quote-macOS-arm64.zip
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install "pyinstaller>=6.0"
+
+      - name: Build .exe
+        run: pyinstaller --noconfirm cs2_quote.spec
+
+      - name: Rename .exe to ASCII
+        shell: pwsh
+        run: |
+          $src = "dist\CS2行情.exe"
+          $dst = "dist\CS2-Quote-Windows.exe"
+          Copy-Item -LiteralPath $src -Destination $dst -Force
+          Get-Item $dst | Format-List Name, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: dist/CS2-Quote-Windows.exe
+          if-no-files-found: error
+
+  release:
+    name: Attach artifacts to GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Compute tag
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: $TAG"
+
+      - name: List downloaded files
+        run: |
+          ls -laR artifacts/
+
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: |
+            artifacts/macos-arm64/CS2-Quote-macOS-arm64.zip
+            artifacts/windows-x64/CS2-Quote-Windows.exe
+          fail_on_unmatched_files: true
