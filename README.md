@@ -12,12 +12,12 @@
 
 ## 📥 下载（双击即用，无需装 Python）
 
-> 最新版本：[**v1.2.0**](https://github.com/zhongshi2x8/dust2-hangqing/releases/tag/v1.2.0) — 新增透明度、刷新间隔、内联涨跌、dust2 图标
+> 最新版本：[**v1.2.1**](https://github.com/zhongshi2x8/dust2-hangqing/releases/tag/v1.2.1) — UI 透气化（行间距 + 价格字号）
 
 | 平台 | 文件 | 大小 | 直链 |
 | --- | --- | --- | --- |
-| 🍎 **macOS (Apple Silicon)** | `CS2-Quote-macOS-arm64.zip` | 26 MB | [⬇️ 下载 v1.2.0](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.2.0/CS2-Quote-macOS-arm64.zip) |
-| 🪟 **Windows** | `CS2-Quote-Windows.exe` | 40 MB | [⬇️ 下载 v1.2.0](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.2.0/CS2-Quote-Windows.exe) |
+| 🍎 **macOS (Apple Silicon)** | `CS2-Quote-macOS-arm64.zip` | 28 MB | [⬇️ 下载 v1.2.1](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.2.1/CS2-Quote-macOS-arm64.zip) |
+| 🪟 **Windows** | `CS2-Quote-Windows.exe` | 38 MB | [⬇️ 下载 v1.2.1](https://github.com/zhongshi2x8/dust2-hangqing/releases/download/v1.2.1/CS2-Quote-Windows.exe) |
 
 > Intel Mac 用户请[自行从源码构建](#-从源码构建)。
 > 全部历史版本见 [Releases 页面](https://github.com/zhongshi2x8/dust2-hangqing/releases)。
