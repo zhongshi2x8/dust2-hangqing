@@ -15,7 +15,8 @@ WATCHLIST_PATH = CONFIG_DIR / "watchlist.json"
 class WatchItem:
     marketHashName: str
     displayName: str = ""
-    quantity: int = 0  # 持仓数量，0 = 仅关注、不计入持仓总价
+    quantity: int = 0     # 持仓数量，0 = 仅关注、不计入持仓总价
+    cost_price: float = 0.0  # 成本单价，0 = 未设置，不参与盈亏计算
 
     def label(self) -> str:
         return self.displayName or self.marketHashName
@@ -64,11 +65,16 @@ def load_watchlist() -> list[WatchItem]:
                 qty = int(entry.get("quantity", 0))
             except (TypeError, ValueError):
                 qty = 0
+            try:
+                cost = float(entry.get("cost_price", 0))
+            except (TypeError, ValueError):
+                cost = 0.0
             items.append(
                 WatchItem(
                     marketHashName=entry["marketHashName"],
                     displayName=entry.get("displayName", ""),
                     quantity=max(0, qty),
+                    cost_price=max(0.0, cost),
                 )
             )
     return items
@@ -100,6 +106,22 @@ def update_quantity(items: list[WatchItem], market_hash_name: str, qty: int) -> 
     for it in items:
         if it.marketHashName == market_hash_name:
             it.quantity = max(0, int(qty))
+            break
+    save_watchlist(items)
+    return items
+
+
+def update_holding(
+    items: list[WatchItem],
+    market_hash_name: str,
+    qty: int,
+    cost_price: float,
+) -> list[WatchItem]:
+    """同时更新持仓数量 + 成本单价。"""
+    for it in items:
+        if it.marketHashName == market_hash_name:
+            it.quantity = max(0, int(qty))
+            it.cost_price = max(0.0, float(cost_price))
             break
     save_watchlist(items)
     return items

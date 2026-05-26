@@ -103,6 +103,30 @@ QLabel#PortfolioValue {{
     background: rgba(212, 175, 55, 25);
     border-radius: 4px;
 }}
+/* 盈亏徽章 红涨/绿跌 */
+QLabel#PnLUp {{
+    font-size: {f_idx_diff}px;
+    color: #ff5a5f;
+    padding: 1px 6px;
+    background: rgba(255, 90, 95, 25);
+    border-radius: 4px;
+    font-weight: 600;
+}}
+QLabel#PnLDown {{
+    font-size: {f_idx_diff}px;
+    color: #2ecc71;
+    padding: 1px 6px;
+    background: rgba(46, 204, 113, 25);
+    border-radius: 4px;
+    font-weight: 600;
+}}
+QLabel#PnLFlat {{
+    font-size: {f_idx_diff}px;
+    color: #9aa0a6;
+    padding: 1px 6px;
+    background: rgba(154, 160, 166, 20);
+    border-radius: 4px;
+}}
 /* 国内习惯：红涨 / 绿跌 */
 QLabel#IndexDiffUp {{
     font-size: {f_idx_diff}px;
@@ -249,6 +273,13 @@ class FloatingWindow(QWidget):
         self.portfolio_label.setVisible(False)
         self.portfolio_label.setToolTip("持仓总价值 = Σ 在售价 × 持仓数量")
         idx_row.addWidget(self.portfolio_label)
+
+        self.pnl_label = QLabel("")
+        self.pnl_label.setObjectName("PnLFlat")
+        self.pnl_label.setVisible(False)
+        self.pnl_label.setToolTip("盈亏 = Σ (现价 − 成本) × 数量（仅对设置了成本单价的饰品计算）")
+        idx_row.addWidget(self.pnl_label)
+
         idx_row.addStretch(1)
         v.addLayout(idx_row)
 
@@ -326,13 +357,47 @@ class FloatingWindow(QWidget):
             row.set_price(prices.get(name))
         self.last_refresh_label.setText(f"· {datetime.now().strftime('%H:%M:%S')}")
 
-    def set_portfolio_value(self, total: float | None) -> None:
+    def set_portfolio(
+        self,
+        total: float | None,
+        pnl: float | None = None,
+        pnl_pct: float | None = None,
+    ) -> None:
+        """更新持仓总价值 + 盈亏徽章。
+
+        - total: 所有持仓项的当前市值（任意 qty>0 的饰品都参与）
+        - pnl / pnl_pct: 仅对设置了 cost_price 的饰品计算的盈亏；None 表示没有任何项设了成本
+        """
         if total is None or total <= 0:
             self.portfolio_label.setText("")
             self.portfolio_label.setVisible(False)
         else:
             self.portfolio_label.setText(f"持仓 ¥{total:,.2f}")
             self.portfolio_label.setVisible(True)
+
+        if pnl is None:
+            self.pnl_label.setText("")
+            self.pnl_label.setVisible(False)
+            return
+
+        pct_text = f"  {pnl_pct:+.2f}%" if pnl_pct is not None else ""
+        if pnl > 0.005:
+            self.pnl_label.setObjectName("PnLUp")
+            self.pnl_label.setText(f"盈亏 ▲ {pnl:+,.2f}{pct_text}")
+        elif pnl < -0.005:
+            self.pnl_label.setObjectName("PnLDown")
+            self.pnl_label.setText(f"盈亏 ▼ {pnl:+,.2f}{pct_text}")
+        else:
+            self.pnl_label.setObjectName("PnLFlat")
+            self.pnl_label.setText(f"盈亏 ¥0.00{pct_text}")
+        self.pnl_label.setVisible(True)
+        # 强制重新应用 QSS（objectName 变了）
+        self.pnl_label.style().unpolish(self.pnl_label)
+        self.pnl_label.style().polish(self.pnl_label)
+
+    # 保留旧接口名以兼容旧调用方
+    def set_portfolio_value(self, total: float | None) -> None:
+        self.set_portfolio(total, None, None)
 
     def refresh_row_quantity(self, market_hash_name: str) -> None:
         row = self._rows.get(market_hash_name)

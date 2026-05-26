@@ -12,6 +12,7 @@ from price_worker import PriceWorkerController
 from steamdt_client import SteamDTClient, SteamDTError, YouPinPrice, _resource_path
 from ui.add_dialog import AddDialog
 from ui.floating_window import DEFAULT_BG_ALPHA, DEFAULT_REFRESH_SEC, FloatingWindow
+from ui.holding_dialog import HoldingDialog
 from watchlist import (
     WatchItem,
     add_item,
@@ -19,7 +20,7 @@ from watchlist import (
     load_watchlist,
     remove_item,
     update_config,
-    update_quantity,
+    update_holding,
 )
 
 
@@ -90,17 +91,44 @@ class AppController:
             if p is not None:
                 self._latest_prices[name] = p
         self.window.set_prices(prices)
-        self.window.set_portfolio_value(self._compute_portfolio())
+        self._refresh_portfolio()
 
-    def _compute_portfolio(self) -> float:
-        total = 0.0
+    def _refresh_portfolio(self) -> None:
+        total_value, pnl, pnl_pct = self._compute_portfolio()
+        self.window.set_portfolio(total_value, pnl, pnl_pct)
+
+    def _compute_portfolio(self) -> tuple[float, float | None, float | None]:
+        """返回 (持仓总市值, 盈亏, 盈亏%)。
+
+        - 持仓总市值：所有 quantity>0 的饰品的 sell_price × quantity 之和
+        - 盈亏 / 盈亏%：仅对同时设置了 cost_price>0 的饰品计算
+                       盈亏 = Σ (sell_price − cost_price) × quantity
+                       盈亏% = 盈亏 / Σ cost_price × quantity
+        """
+        total_value = 0.0
+        cost_basis = 0.0
+        market_value_of_cost_items = 0.0
+        any_cost_set = False
+
         for it in self.items:
             if it.quantity <= 0:
                 continue
             p = self._latest_prices.get(it.marketHashName)
-            if p and p.sell_price is not None:
-                total += p.sell_price * it.quantity
-        return total
+            if not p or p.sell_price is None:
+                continue
+            item_value = p.sell_price * it.quantity
+            total_value += item_value
+            if it.cost_price > 0:
+                any_cost_set = True
+                cost_basis += it.cost_price * it.quantity
+                market_value_of_cost_items += item_value
+
+        if not any_cost_set:
+            return total_value, None, None
+
+        pnl = market_value_of_cost_items - cost_basis
+        pnl_pct = (pnl / cost_basis * 100) if cost_basis > 0 else 0.0
+        return total_value, pnl, pnl_pct
 
     def _on_refresh(self) -> None:
         self.window.show_status("刷新中…", is_error=False, timeout_ms=2000)
@@ -129,31 +157,31 @@ class AppController:
         self.items = remove_item(self.items, market_hash_name)
         self.window.rebuild_rows(self.items)
         self.worker.set_names([i.marketHashName for i in self.items])
-        self.window.set_portfolio_value(self._compute_portfolio())
+        self._refresh_portfolio()
 
     def _on_set_quantity(self, market_hash_name: str) -> None:
-        current = next(
-            (it.quantity for it in self.items if it.marketHashName == market_hash_name),
-            0,
+        target = next(
+            (it for it in self.items if it.marketHashName == market_hash_name),
+            None,
         )
-        label = next(
-            (it.label() for it in self.items if it.marketHashName == market_hash_name),
-            market_hash_name,
-        )
-        qty, ok = QInputDialog.getInt(
-            self.window,
-            "持仓数量",
-            f"{label}\n\n持有数量（0 表示仅关注、不计入持仓总价）：",
-            value=int(current),
-            min=0,
-            max=99999,
-            step=1,
-        )
-        if not ok:
+        if target is None:
             return
-        self.items = update_quantity(self.items, market_hash_name, qty)
+
+        dlg = HoldingDialog(
+            item_label=target.label(),
+            current_qty=target.quantity,
+            current_cost=target.cost_price,
+            parent=self.window,
+        )
+        dlg.submitted.connect(
+            lambda qty, cost: self._apply_holding(market_hash_name, qty, cost)
+        )
+        dlg.exec()
+
+    def _apply_holding(self, market_hash_name: str, qty: int, cost: float) -> None:
+        self.items = update_holding(self.items, market_hash_name, qty, cost)
         self.window.refresh_row_quantity(market_hash_name)
-        self.window.set_portfolio_value(self._compute_portfolio())
+        self._refresh_portfolio()
 
     def _on_settings_changed(self) -> None:
         update_config(
